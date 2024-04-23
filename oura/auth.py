@@ -10,10 +10,9 @@ class OuraOAuth2Client:
 
     AUTHORIZE_BASE_URL = "https://cloud.ouraring.com/oauth/authorize"
     TOKEN_BASE_URL = "https://api.ouraring.com/oauth/token"
-    SCOPE = ["email", "personal", "daily"]
+    SCOPE = ["email", "personal", "daily", "heartrate", "workout", "tag", "session"]
 
     def __init__(self, client_id, client_secret):
-
         """
         Initialize the client for oauth flow.
 
@@ -58,6 +57,7 @@ class OuraOAuth2Client:
 
 class OAuthRequestHandler:
     TOKEN_BASE_URL = "https://api.ouraring.com/oauth/token"
+    TOKEN_REVOKE_URL = "https://api.ouraring.com/oauth/revoke"
 
     def __init__(
         self,
@@ -84,13 +84,15 @@ class OAuthRequestHandler:
             token_updater=refresh_callback,
         )
 
-    def make_request(self, url):
-        method = "GET"
+    def make_request(self, url, method="GET"):
         response = self._session.request(method, url)
         if response.status_code == 401:
             self._refresh_token()
             response = self._session.request(method, url)
         return response
+
+    def make_request_v2(self, url, method="GET"):
+        return self.make_request(url, method)
 
     def _refresh_token(self):
         token = self._session.refresh_token(
@@ -103,10 +105,24 @@ class OAuthRequestHandler:
 
         return token
 
+    def revoke_token(self):
+        return self._session.request("POST", self.TOKEN_REVOKE_URL)
+
 
 class PersonalRequestHandler:
+    TOKEN_REVOKE_URL = "https://api.ouraring.com/oauth/revoke"
+
     def __init__(self, personal_access_token):
         self.personal_access_token = personal_access_token
 
-    def make_request(self, url):
-        return requests.get(url, params={"access_token": self.personal_access_token})
+    def make_request(self, url, method="GET"):
+        requests_method = requests.post if method == "POST" else requests.get
+        return requests_method(url, params={"access_token": self.personal_access_token})
+
+    def make_request_v2(self, url, method="GET"):
+        requests_method = requests.post if method == "POST" else requests.get
+        headers = {"Authorization": f"Bearer {self.personal_access_token}"}
+        return requests_method(url, headers=headers)
+
+    def revoke_token(self):
+        return self.make_request_v2(self.TOKEN_REVOKE_URL, "POST")
